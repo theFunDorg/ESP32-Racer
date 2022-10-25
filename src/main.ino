@@ -2,7 +2,7 @@
 // #include <micro_ros_arduino.h>
 
 
-#include <Arduino.h>
+// #include <Arduino.h>
 #include <micro_ros_platformio.h>
 
 #include <stdio.h>
@@ -148,7 +148,9 @@ void setup() {
 
 
   // -------------------------- SETTING UP ROS2 -------------------------- //
-  set_microros_transports();
+  // set_microros_transports();
+  Serial.begin(115200);
+  set_microros_serial_transports(Serial);
   // Add this in at a later point, comment out line above
   //static inline void set_microros_wifi_transports(char *ssid, char *pass, char *agent_ip, uint agent_port)
   //set_microros_wifi_transports("malware.exe", "WIFI PASS", "192.168.1.57", 8888);
