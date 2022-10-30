@@ -60,16 +60,17 @@ rcl_timer_t timer_sensor;
 
 // SETUP MESSAGE FILE TYPE
 // msg__engine_actuate 
-racer_interfaces__msg__EngineActuate msgIn;
+racer_interfaces__msg__EngineActuate inputMsg;
 racer_interfaces__msg__EngineSensor msgOut;
 //#define LED_PIN 13
 
 #define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){error_loop();}}
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
+#define ONBOARD_LED  2
 
 void error_loop(){
   while(1){
-  //  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+    digitalWrite(ONBOARD_LED, !digitalRead(ONBOARD_LED));
     delay(100);
   }
  }
@@ -77,140 +78,138 @@ void error_loop(){
 
 //twist message cb
 void subscription_callback(const void *msgin) {
-  const racer_interfaces__msg__EngineActuate * msgIn = (const racer_interfaces__msg__EngineActuate *)msgIn;
-  servo1.write((int32_t) msgIn->l_elevon);
-  servo2.write((int32_t) msgIn->r_elevon);
-  servo3.write((int32_t) msgIn->v_nozzle);
-  servo4.write((int32_t) msgIn->h_nozzle);
+  const racer_interfaces__msg__EngineActuate * inputMsg = (const racer_interfaces__msg__EngineActuate *)msgin;
+  servo1.write((int32_t) inputMsg->l_elevon);
+  servo2.write((int32_t) inputMsg->r_elevon);
+  servo3.write((int32_t) inputMsg->v_nozzle);
+  servo4.write((int32_t) inputMsg->h_nozzle);
  }
 
 
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 {  
+  //Serial2.println("Running timer callback ");
   RCLC_UNUSED(last_call_time);
   if (timer != NULL) {
       msgOut.height=(int32_t) tof.readRangeContinuousMillimeters();
-
-  if(mpu.getMotionInterruptStatus()) {
-    /* Get new sensor events with the readings */
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-
-    /* Print out the values */
-    msgOut.ax=(a.acceleration.x);
-    msgOut.ay=(a.acceleration.y);
-    msgOut.az=(a.acceleration.z);
-    msgOut.gx=(g.gyro.x);
-    msgOut.gy=(g.gyro.y);
-    msgOut.gz=(g.gyro.z);
-      
-    RCSOFTCHECK(rcl_publish(&publisher_sensor, &msgOut, NULL));
+      //Serial2.println("Height is "+String((int32_t) tof.readRangeContinuousMillimeters()));
+      if(mpu.getMotionInterruptStatus()) {
+          /* Get new sensor events with the readings */
+          sensors_event_t a, g, temp;
+          mpu.getEvent(&a, &g, &temp);
+          /* Print out the values */
+          msgOut.ax=(a.acceleration.x);
+          msgOut.ay=(a.acceleration.y);
+          msgOut.az=(a.acceleration.z);
+          msgOut.gx=(g.gyro.x);
+          msgOut.gy=(g.gyro.y);
+          msgOut.gz=(g.gyro.z);
+          //Serial2.println("gyro x is "+String(g.gyro.x));
+      }
+  RCSOFTCHECK(rcl_publish(&publisher_sensor, &msgOut, NULL));
   }
- }
 }
 // ======================================================================================================== //
 // SETUP
 // ======================================================================================================== //
 void setup() {
 
-  // -------------------------- SETTING UP TOF SENSOR -------------------------- //
-  Wire.begin();
-  tof.setTimeout(500);
-  if (!tof.init())
-  {
-    while (1) {}
-  }
-  tof.startContinuous();
+    // -------------------------- SETTING UP TOF SENSOR -------------------------- //
+    Wire.begin();
+    tof.setTimeout(500);
+    if (!tof.init())
+    {
+      while (1) {}
+    }
+    tof.startContinuous();
 
-  // -------------------------- SETTING UP SERVO -------------------------- //
-	ESP32PWM::allocateTimer(0);
-	ESP32PWM::allocateTimer(1);
-	ESP32PWM::allocateTimer(2);
-	ESP32PWM::allocateTimer(3);
-	servo1.setPeriodHertz(50);      // Standard 50hz servo
-	servo1.attach(servo1Pin, 1000, 2000); // attaches the servo on pin 18 to the servo object
-	servo2.setPeriodHertz(50);
-	servo2.attach(servo2Pin, 1000, 2000);
-	servo3.setPeriodHertz(50);
-	servo3.attach(servo3Pin, 1000, 2000);
-	servo4.setPeriodHertz(50);
-	servo4.attach(servo4Pin, 1000, 2000);
-
-
-  // -------------------------- SETTING UP 6DOF SENSOR -------------------------- //
-
-  mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
-  mpu.setMotionDetectionThreshold(1);
-  mpu.setMotionDetectionDuration(20);
-  mpu.setInterruptPinLatch(true);	// Keep it latched.  Will turn off when reinitialized.
-  mpu.setInterruptPinPolarity(true);
-  mpu.setMotionInterrupt(true);
+    // -------------------------- SETTING UP SERVO -------------------------- //
+	  ESP32PWM::allocateTimer(0);
+	  ESP32PWM::allocateTimer(1);
+	  ESP32PWM::allocateTimer(2);
+	  ESP32PWM::allocateTimer(3);
+	  servo1.setPeriodHertz(50);      // Standard 50hz servo
+	  servo1.attach(servo1Pin, 1000, 2000); // attaches the servo on pin 18 to the servo object
+	  servo2.setPeriodHertz(50);
+	  servo2.attach(servo2Pin, 1000, 2000);
+	  servo3.setPeriodHertz(50);
+	  servo3.attach(servo3Pin, 1000, 2000);
+	  servo4.setPeriodHertz(50);
+	  servo4.attach(servo4Pin, 1000, 2000);
 
 
-  // -------------------------- SETTING UP ROS2 -------------------------- //
-  // set_microros_transports();
-  Serial.begin(115200);
-  set_microros_serial_transports(Serial);
-  // Add this in at a later point, comment out line above
-  //static inline void set_microros_wifi_transports(char *ssid, char *pass, char *agent_ip, uint agent_port)
-  //set_microros_wifi_transports("malware.exe", "WIFI PASS", "192.168.1.57", 8888);
-  delay(2000);
+    // -------------------------- SETTING UP 6DOF SENSOR -------------------------- //
 
-  allocator = rcl_get_default_allocator();
-  
-  //create init_options
-  RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
-  // create nodes
-  RCCHECK(rclc_node_init_default(&node, "controller", "left_engine", &support));
+    mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
+    mpu.setMotionDetectionThreshold(1);
+    mpu.setMotionDetectionDuration(20);
+    mpu.setInterruptPinLatch(true);	// Keep it latched.  Will turn off when reinitialized.
+    mpu.setInterruptPinPolarity(true);
+    mpu.setMotionInterrupt(true);
 
-  // create publisher
-  RCCHECK(rclc_publisher_init_default(
-    &publisher_sensor,
-    &node,
-    ROSIDL_GET_MSG_TYPE_SUPPORT(racer_interfaces, msg, EngineSensor),
-    "engine_sensors"));
-        
 
-  // create subscriber
-  RCCHECK(rclc_subscription_init_default(
-    &subscriber_actuate,
-    &node,
-    ROSIDL_GET_MSG_TYPE_SUPPORT(racer_interfaces, msg, EngineActuate),
-    "controls"));
+    // -------------------------- SETTING UP ROS2 -------------------------- //
+    // set_microros_transports();
+    Serial.begin(115200);
+    //Serial2.begin(9600);
+    //Serial2.println("Connected!!");
+    set_microros_serial_transports(Serial);
+    // Add this in at a later point, comment out line above
+    //static inline void set_microros_wifi_transports(char *ssid, char *pass, char *agent_ip, uint agent_port)
+    //set_microros_wifi_transports("malware.exe", "WIFI PASS", "192.168.1.57", 8888);
+    delay(2000);
 
-  // create timer,
-  const unsigned int timer_timeout = 1000;
-  RCCHECK(rclc_timer_init_default(
-    &timer_sensor,
-    &support,
-    RCL_MS_TO_NS(timer_timeout),
-    timer_callback));
+    allocator = rcl_get_default_allocator();
 
-  // -------------------------- SETTING ROS EXECUTOR -------------------------- //
+    //create init_options
+    RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+    // create nodes
+    RCCHECK(rclc_node_init_default(&node, "controller", "left_engine", &support));
 
-  // total number of handles = #subscriptions + #timers
-  unsigned int num_handles = 1 + 1;
-  rclc_executor_init(&executor, &support.context, num_handles, &allocator);
-  
-  // create executor
-  executor = rclc_executor_get_zero_initialized_executor();
-  RCCHECK(rclc_executor_init(&executor, &support.context, num_handles, &allocator));
-  RCCHECK(rclc_executor_add_timer(&executor, &timer_sensor));
+    // create publisher
+    RCCHECK(rclc_publisher_init_default(
+      &publisher_sensor,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(racer_interfaces, msg, EngineSensor),
+      "engine_sensors"));
 
-  RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_actuate, &msgIn, &subscription_callback, ON_NEW_DATA));
-  // Optional prepare for avoiding allocations during spin
-  RCCHECK(rclc_executor_prepare(&executor));
 
-  //msgOut.data = 0;
-  //msgIn.data = 0;
+    // create subscriber
+    RCCHECK(rclc_subscription_init_default(
+      &subscriber_actuate,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(racer_interfaces, msg, EngineActuate),
+      "controls"));
 
- };
+    // create timer,
+    const unsigned int timer_timeout = 1000;
+    RCCHECK(rclc_timer_init_default(
+      &timer_sensor,
+      &support,
+      RCL_MS_TO_NS(timer_timeout),
+      timer_callback));
+
+    // -------------------------- SETTING ROS EXECUTOR -------------------------- //
+
+    // total number of handles = #subscriptions + #timers
+    unsigned int num_handles = 1 + 1;
+    rclc_executor_init(&executor, &support.context, num_handles, &allocator);
+
+    // create executor
+    executor = rclc_executor_get_zero_initialized_executor();
+    RCCHECK(rclc_executor_init(&executor, &support.context, num_handles, &allocator));
+    RCCHECK(rclc_executor_add_timer(&executor, &timer_sensor));
+    RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_actuate, &inputMsg, &subscription_callback, ON_NEW_DATA));
+    // Optional prepare for avoiding allocations during spin
+    RCCHECK(rclc_executor_prepare(&executor));
+    };
 
 // ======================================================================================================== //
 // LOOP
 // ======================================================================================================== //
 
 void loop() {
+  Serial2.println("Looping!!");
   delay(100);
   RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10000)));
  };
